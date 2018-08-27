@@ -101,7 +101,7 @@ void WIFIConfig::setupConfigPortal() {
 
   /* Setup the DNS server redirecting all the domains to the apIP */
   dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
-  dnsServer->start(DNS_PORT, "nodewire.local", WiFi.softAPIP());
+  dnsServer->start(DNS_PORT, "*", WiFi.softAPIP());
 
   /* Setup web pages: root, wifi config pages, SO captive portal detectors and not found. */
   server->on("/", std::bind(&WIFIConfig::handleRoot, this));
@@ -222,9 +222,6 @@ void WIFIConfig::setConfigPortalTimeout(unsigned long seconds) {
 
 /** Wifi config page handler */
 void WIFIConfig::handleRoot(void) {
-  if (captivePortal()) { // If caprive portal redirect instead of displaying the page.
-    return;
-  }
   String page = FPSTR(HTTP_HEAD);
   page.replace("{v}", "Nodewire WiFi Config");
   page += FPSTR(HTTP_SCRIPT);
