@@ -6,16 +6,16 @@
 #define MAX_UNAME_LEN       50
 #define MAX_PWD_LEN         50
 
-char server[MAX_SERVER_LEN+1];
-char ssid[MAX_SSID_LEN+1];
-char key[MAX_KEY_LEN+1];
-char uname[MAX_UNAME_LEN+1];
-char pwd[MAX_PWD_LEN+1];
+char ssid[MAX_SSID_LEN + 1];
+char key[MAX_KEY_LEN + 1];
+char uname[MAX_UNAME_LEN + 1];
+char pwd[MAX_PWD_LEN + 1];
+char server[MAX_SERVER_LEN + 1] = "defaultServer.com";
 
 WIFIConfig wcfg;
-WIFIConfigParam uname_param("user", "Username", NULL, MAX_UNAME_LEN);
-WIFIConfigParam pwd_param("pwd", "Password", NULL, MAX_PWD_LEN, "type='password'");
-WIFIConfigParam server_param("server", "Server (Optional)", NULL, MAX_SERVER_LEN);
+WIFIConfigParam uname_param("user", "Username", uname, MAX_UNAME_LEN);
+WIFIConfigParam pwd_param("pwd", "Password", pwd, MAX_PWD_LEN, "type='password'");
+WIFIConfigParam server_param("server", "Server (Optional)", server, MAX_SERVER_LEN);
 
 void setup() {
   Serial.begin(9600);
@@ -23,7 +23,7 @@ void setup() {
   wcfg.setConfigPortalTimeout(120);
   wcfg.addParameter(&uname_param);
   wcfg.addParameter(&pwd_param);
-  wcfg.addParameter(&server_param);
+  wcfg.addParameter(&server_param, true);
   
   if (!wcfg.startConfigPortal("TestAP", "12345678")) {
     Serial.println("Failed to setup AP");

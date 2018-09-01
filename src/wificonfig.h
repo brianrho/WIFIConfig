@@ -14,21 +14,22 @@
 #define WIFIConfig_h
 
 #include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 #include <DNSServer.h>
 #include <memory>
 
-#define WC_ENABLE_DEBUG
+//#define WC_ENABLE_DEBUG
 
 #if defined(WC_ENABLE_DEBUG)
-    #define DEFAULT_STREAM          Serial
+    #define WC_DEFAULT_STREAM          Serial
 
-    #define WC_DEBUG_PRINT(x)          DEFAULT_STREAM.print(x)
-    #define WC_DEBUG_PRINTLN(x)        DEFAULT_STREAM.println(x)
-    #define WC_DEBUG_DEC(x)            DEFAULT_STREAM.print(x)
-    #define WC_DEBUG_DECLN(x)          DEFAULT_STREAM.println(x)
-    #define WC_DEBUG_HEX(x)            DEFAULT_STREAM.print(x, HEX)
-    #define WC_DEBUG_HEXLN(x)          DEFAULT_STREAM.println(x, HEX) 
+    #define WC_DEBUG_PRINT(x)          WC_DEFAULT_STREAM.print(x)
+    #define WC_DEBUG_PRINTLN(x)        WC_DEFAULT_STREAM.println(x)
+    #define WC_DEBUG_DEC(x)            WC_DEFAULT_STREAM.print(x)
+    #define WC_DEBUG_DECLN(x)          WC_DEFAULT_STREAM.println(x)
+    #define WC_DEBUG_HEX(x)            WC_DEFAULT_STREAM.print(x, HEX)
+    #define WC_DEBUG_HEXLN(x)          WC_DEFAULT_STREAM.println(x, HEX) 
 #else
     #define WC_DEBUG_PRINT(x)
     #define WC_DEBUG_PRINTLN(x)
@@ -42,17 +43,6 @@ extern "C" {
   #include "user_interface.h"
 }
 
-const char HTTP_HEAD[] PROGMEM            = "<!DOCTYPE html><html lang=\"en\"><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=no\"/><title>{v}</title>";
-const char HTTP_STYLE[] PROGMEM           = "<style>.c{text-align: center;} div,input{padding:5px;font-size:1em;} input{width:95%;} body{text-align: center;font-family:verdana;} button{border:0;border-radius:0.3rem;background-color:#1fa3ec;color:#fff;line-height:2.4rem;font-size:1.2rem;width:100%;} .q{float: right;width: 64px;text-align: right;} .l{background: url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAALVBMVEX///8EBwfBwsLw8PAzNjaCg4NTVVUjJiZDRUUUFxdiZGSho6OSk5Pg4eFydHTCjaf3AAAAZElEQVQ4je2NSw7AIAhEBamKn97/uMXEGBvozkWb9C2Zx4xzWykBhFAeYp9gkLyZE0zIMno9n4g19hmdY39scwqVkOXaxph0ZCXQcqxSpgQpONa59wkRDOL93eAXvimwlbPbwwVAegLS1HGfZAAAAABJRU5ErkJggg==\") no-repeat left center;background-size: 1em;}</style>";
-const char HTTP_SCRIPT[] PROGMEM          = "<script>function c(l){document.getElementById('s').value=l.innerText||l.textContent;document.getElementById('p').focus();}</script>";
-const char HTTP_HEAD_END[] PROGMEM        = "</head><body><div style='text-align:left;display:inline-block;min-width:260px;'>";
-const char HTTP_ITEM[] PROGMEM            = "<div><a href='#p' onclick='c(this)'>{v}</a>&nbsp;<span class='q {i}'>{r}%</span></div>";
-const char HTTP_FORM_START[] PROGMEM      = "<form method='get' action='wifisave'><input id='s' name='s' length=32 placeholder='SSID'><br/><input id='p' name='p' length=64 type='password' placeholder='Passkey'><br/>";
-const char HTTP_FORM_PARAM[] PROGMEM      = "<br/><input id='{i}' name='{n}' maxlength={l} placeholder='{p}' value='{v}' {c}>";
-const char HTTP_FORM_END[] PROGMEM        = "<br/><button type='submit'>Configure</button></form>";
-const char HTTP_SAVED[] PROGMEM           = "<div>Configuration successful.<br /></div>";
-const char HTTP_END[] PROGMEM             = "</div></body></html>";
-
 #define WIFICONFIG_MAX_PARAMS 10
 
 enum {
@@ -65,8 +55,8 @@ enum {
 class WIFIConfigParam {
   public:
     WIFIConfigParam(const char *custom);
-    WIFIConfigParam(const char *id, const char *placeholder, const char *defaultValue, int length);
-    WIFIConfigParam(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom);
+    WIFIConfigParam(const char *id, const char *placeholder, char *buffer, int length);
+    WIFIConfigParam(const char *id, const char *placeholder, char *buffer, int length, const char *custom);
 
     const char *getID();
     const char *getValue();
@@ -80,7 +70,7 @@ class WIFIConfigParam {
     int         _length;
     const char *_customHTML;
 
-    void init(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom);
+    void init(const char *id, const char *placeholder, char *buffer, int length, const char *custom);
 
     friend class WIFIConfig;
 };
@@ -107,7 +97,8 @@ class WIFIConfig
     //called when settings have been changed and connection was successful
     void          setSaveConfigCallback( void (*func)(void) );
     //adds a custom parameter
-    void          addParameter(WIFIConfigParam *p);
+    void          addParameter(WIFIConfigParam *p, bool hasDefault = false);
+    void          resetParameterList(void);
     //TODO
     //if this is set, customise style
     void          setCustomHeadElement(const char* element);
@@ -117,13 +108,8 @@ class WIFIConfig
     uint8_t       config_loop(void);
   private:
     std::unique_ptr<DNSServer>        dnsServer;
-    std::unique_ptr<ESP8266WebServer> server;
-
-    //const int     WM_DONE                 = 0;
-    //const int     WM_WAIT                 = 10;
-
-    //const String  HTTP_HEAD = "<!DOCTYPE html><html lang=\"en\"><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/><title>{v}</title>";
-
+    std::unique_ptr<AsyncWebServer> server;
+    
     void          setupConfigPortal();
 
     const char*   _apName                 = "no-net";
@@ -137,27 +123,18 @@ class WIFIConfig
 
     const char*   _customHeadElement      = "";
 
-    //String        getEEPROMString(int start, int len);
-    //void          setEEPROMString(int start, int len, String string);
-
     int           status = WL_IDLE_STATUS;
 
-    void          handleRoot();
-    void          handleWifiSave();
-    void          handleInfo();
-    void          handleReset();
-    void          handleNotFound();
-    void          handle204();
-    boolean       captivePortal();
+    void          handleRoot(AsyncWebServerRequest * request);
+    void          handleWifiSave(AsyncWebServerRequest * request);
+    void          handleInfo(AsyncWebServerRequest * request);
+    void          handleReset(AsyncWebServerRequest * request);
+    void          handleNotFound(AsyncWebServerRequest * request);
     boolean       configPortalHasTimeout();
+    void          cleanup(void);
 
     // DNS server
     const byte    DNS_PORT = 53;
-
-    //helpers
-    int           getRSSIasQuality(int RSSI);
-    boolean       isIp(String str);
-    String        toStringIp(IPAddress ip);
 
     boolean       recvd_config = false;
     uint8_t       config_state = WIFICONFIG_NOTSTARTED;
@@ -165,15 +142,6 @@ class WIFIConfig
     void (*_savecallback)(void) = NULL;
 
     WIFIConfigParam* _params[WIFICONFIG_MAX_PARAMS];
-
-    template <class T>
-    auto optionalIPFromString(T *obj, const char *s) -> decltype(  obj->fromString(s)  ) {
-      return  obj->fromString(s);
-    }
-    auto optionalIPFromString(...) -> bool {
-      WC_DEBUG_PRINTLN("NO fromString METHOD ON IPAddress, you need ESP8266 core 2.1.0 or newer for Custom IP configuration to work.");
-      return false;
-    }
 };
 
 #endif

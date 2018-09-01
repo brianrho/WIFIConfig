@@ -14,6 +14,17 @@
 
 #include "wificonfig.h"
 
+const char WC_HTTP_HEAD[] PROGMEM            = "<!DOCTYPE html><html lang=\"en\"><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=no\"/><title>{v}</title>";
+const char WC_HTTP_STYLE[] PROGMEM           = "<style>.c{text-align: center;} div,input{padding:5px;font-size:1em;} input{width:95%;} body{text-align: center;font-family:verdana;} button{border:0;border-radius:0.3rem;background-color:#1fa3ec;color:#fff;line-height:2.4rem;font-size:1.2rem;width:100%;} .q{float: right;width: 64px;text-align: right;} .l{background: url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAALVBMVEX///8EBwfBwsLw8PAzNjaCg4NTVVUjJiZDRUUUFxdiZGSho6OSk5Pg4eFydHTCjaf3AAAAZElEQVQ4je2NSw7AIAhEBamKn97/uMXEGBvozkWb9C2Zx4xzWykBhFAeYp9gkLyZE0zIMno9n4g19hmdY39scwqVkOXaxph0ZCXQcqxSpgQpONa59wkRDOL93eAXvimwlbPbwwVAegLS1HGfZAAAAABJRU5ErkJggg==\") no-repeat left center;background-size: 1em;}</style>";
+const char WC_HTTP_SCRIPT[] PROGMEM          = "<script>function c(l){document.getElementById('s').value=l.innerText||l.textContent;document.getElementById('p').focus();}</script>";
+const char WC_HTTP_HEAD_END[] PROGMEM        = "</head><body><div style='text-align:left;display:inline-block;min-width:260px;'>";
+const char WC_HTTP_ITEM[] PROGMEM            = "<div><a href='#p' onclick='c(this)'>{v}</a>&nbsp;<span class='q {i}'>{r}%</span></div>";
+const char WC_HTTP_FORM_START[] PROGMEM      = "<form method='get' action='wifisave'><input id='s' name='s' length=32 placeholder='SSID'><br/><input id='p' name='p' length=64 type='password' placeholder='Passkey'><br/>";
+const char WC_HTTP_FORM_PARAM[] PROGMEM      = "<br/><input id='{i}' name='{n}' maxlength={l} placeholder='{p}' value='{v}' {c}>";
+const char WC_HTTP_FORM_END[] PROGMEM        = "<br/><button type='submit'>Configure</button></form>";
+const char WC_HTTP_SAVED[] PROGMEM           = "<div>Configuration successful.<br /></div>";
+const char WC_HTTP_END[] PROGMEM             = "</div></body></html>";
+
 WIFIConfigParam::WIFIConfigParam(const char *custom) {
   _id = NULL;
   _placeholder = NULL;
@@ -23,25 +34,20 @@ WIFIConfigParam::WIFIConfigParam(const char *custom) {
   _customHTML = custom;
 }
 
-WIFIConfigParam::WIFIConfigParam(const char *id, const char *placeholder, const char *defaultValue, int length) {
-  init(id, placeholder, defaultValue, length, "");
+// Length parameter indicates max length of string to copy, excluding terminating nul
+WIFIConfigParam::WIFIConfigParam(const char *id, const char *placeholder, char *buffer, int length) {
+  init(id, placeholder, buffer, length, "");
 }
 
-WIFIConfigParam::WIFIConfigParam(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom) {
-  init(id, placeholder, defaultValue, length, custom);
+WIFIConfigParam::WIFIConfigParam(const char *id, const char *placeholder, char *buffer, int length, const char *custom) {
+  init(id, placeholder, buffer, length, custom);
 }
 
-void WIFIConfigParam::init(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom) {
+void WIFIConfigParam::init(const char *id, const char *placeholder, char *buffer, int length, const char *custom) {
   _id = id;
   _placeholder = placeholder;
   _length = length;
-  _value = new char[length + 1];
-  for (int i = 0; i < length; i++) {
-    _value[i] = 0;
-  }
-  if (defaultValue != NULL) {
-    strncpy(_value, defaultValue, length);
-  }
+  _value = buffer;
 
   _customHTML = custom;
 }
@@ -65,7 +71,7 @@ const char* WIFIConfigParam::getCustomHTML() {
 WIFIConfig::WIFIConfig() {
 }
 
-void WIFIConfig::addParameter(WIFIConfigParam *p) {
+void WIFIConfig::addParameter(WIFIConfigParam *p, bool hasDefault) {
   if(_paramsCount + 1 > WIFICONFIG_MAX_PARAMS)
   {
     //Max parameters exceeded!
@@ -74,15 +80,24 @@ void WIFIConfig::addParameter(WIFIConfigParam *p) {
 	WC_DEBUG_PRINTLN(p->getID());
 	return;
   }
+  
+  // nul terminate the parameter buffer, if there's no default value
+  if (!hasDefault && p->getValue() != NULL && p->getValueLength() != 0)
+      p->_value[0] = 0;
+  
   _params[_paramsCount] = p;
   _paramsCount++;
   WC_DEBUG_PRINT("::Adding parameter: ");
   WC_DEBUG_PRINTLN(p->getID());
 }
 
+void WIFIConfig::resetParameterList(void) {
+    _paramsCount = 0;
+}
+
 void WIFIConfig::setupConfigPortal() {
   dnsServer.reset(new DNSServer());
-  server.reset(new ESP8266WebServer(80));
+  server.reset(new AsyncWebServer(80));
 
   _configPortalStart = millis();
 
@@ -104,13 +119,12 @@ void WIFIConfig::setupConfigPortal() {
   dnsServer->start(DNS_PORT, "*", WiFi.softAPIP());
 
   /* Setup web pages: root, wifi config pages, SO captive portal detectors and not found. */
-  server->on("/", std::bind(&WIFIConfig::handleRoot, this));
-  server->on("/wifisave", std::bind(&WIFIConfig::handleWifiSave, this));
-  server->on("/i", std::bind(&WIFIConfig::handleInfo, this));
-  server->on("/r", std::bind(&WIFIConfig::handleReset, this));
-  //server->on("/generate_204", std::bind(&WIFIConfig::handle204, this));  //Android/Chrome OS captive portal check.
-  server->on("/fwlink", std::bind(&WIFIConfig::handleRoot, this));  //Microsoft captive portal. Maybe not needed. Might be handled by notFound handler.
-  server->onNotFound (std::bind(&WIFIConfig::handleNotFound, this));
+  server->on("/", std::bind(&WIFIConfig::handleRoot, this, std::placeholders::_1));
+  server->on("/wifisave", std::bind(&WIFIConfig::handleWifiSave, this, std::placeholders::_1));
+  server->on("/i", std::bind(&WIFIConfig::handleInfo, this, std::placeholders::_1));
+  server->on("/r", std::bind(&WIFIConfig::handleReset, this, std::placeholders::_1));
+  server->on("/fwlink", std::bind(&WIFIConfig::handleRoot, this, std::placeholders::_1));  //Microsoft captive portal. Maybe not needed. Might be handled by notFound handler.
+  server->onNotFound (std::bind(&WIFIConfig::handleNotFound, this, std::placeholders::_1));
   server->begin(); // Web server start
   WC_DEBUG_PRINTLN("::HTTP server started");
 
@@ -152,38 +166,24 @@ uint8_t WIFIConfig::config_loop(void) {
         
     if (configPortalHasTimeout()) {
         config_state = WIFICONFIG_TIMEOUT;
-        server.reset();
-        dnsServer->stop();
-        dnsServer.reset();
-      
-        WiFi.softAPdisconnect(true);
-        WiFi.mode(WIFI_STA);
+        WC_DEBUG_PRINTLN("::Timeout. Stopping servers");
+        cleanup();
     }
     
     else if (recvd_config) {
       recvd_config = false;
       delay(1000);
-      WC_DEBUG_PRINTLN("::Stopping servers");
+      WC_DEBUG_PRINTLN("::Done. Stopping servers");
       
-      server.reset();
-      dnsServer->stop();
-      dnsServer.reset();
+      cleanup();
       config_state = WIFICONFIG_COMPLETE;
       
-      WiFi.softAPdisconnect(true);
-      WiFi.mode(WIFI_STA);
-
-      /*if (_ssid != "")
-        WiFi.begin(_ssid.c_str(), _pass.c_str());*/
-      
       if ( _savecallback != NULL) {
-          //todo: check if any custom parameters actually exist, and check if they really changed maybe
           _savecallback();
       }
     }
     else {
         dnsServer->processNextRequest();
-        server->handleClient();
     }
     
     return config_state;
@@ -193,7 +193,7 @@ uint8_t WIFIConfig::config_loop(void) {
 bool WIFIConfig::get_wifi_ssid(char * ssidbuf, uint16_t len) {
     if (_ssid == "" || _ssid.length() > len)
         return false;
-    strcpy(ssidbuf, _ssid.c_str());
+    _ssid.toCharArray(ssidbuf, len + 1);
     return true;
 }
 
@@ -201,7 +201,7 @@ bool WIFIConfig::get_wifi_ssid(char * ssidbuf, uint16_t len) {
 bool WIFIConfig::get_wifi_passkey(char * keybuf, uint16_t len) {
     if (_pass == "" || _pass.length() > len)
         return false;
-    strcpy(keybuf, _pass.c_str());
+    _pass.toCharArray(keybuf, len + 1);
     return true;
 }
 
@@ -221,15 +221,15 @@ void WIFIConfig::setConfigPortalTimeout(unsigned long seconds) {
 }
 
 /** Wifi config page handler */
-void WIFIConfig::handleRoot(void) {
-  String page = FPSTR(HTTP_HEAD);
+void WIFIConfig::handleRoot(AsyncWebServerRequest * request) {
+  String page = FPSTR(WC_HTTP_HEAD);
   page.replace("{v}", "Nodewire WiFi Config");
-  page += FPSTR(HTTP_SCRIPT);
-  page += FPSTR(HTTP_STYLE);
+  page += FPSTR(WC_HTTP_SCRIPT);
+  page += FPSTR(WC_HTTP_STYLE);
   page += _customHeadElement;
-  page += FPSTR(HTTP_HEAD_END);
+  page += FPSTR(WC_HTTP_HEAD_END);
 
-  page += FPSTR(HTTP_FORM_START);
+  page += FPSTR(WC_HTTP_FORM_START);
   char parLength[5];
   // add the extra parameters to the form
   for (int i = 0; i < _paramsCount; i++) {
@@ -237,7 +237,7 @@ void WIFIConfig::handleRoot(void) {
       break;
     }
 
-    String pitem = FPSTR(HTTP_FORM_PARAM);
+    String pitem = FPSTR(WC_HTTP_FORM_PARAM);
     if (_params[i]->getID() != NULL) {
       pitem.replace("{i}", _params[i]->getID());
       pitem.replace("{n}", _params[i]->getID());
@@ -256,23 +256,23 @@ void WIFIConfig::handleRoot(void) {
     page += "<br/>";
   }
 
-  page += FPSTR(HTTP_FORM_END);
-  page += FPSTR(HTTP_END);
+  page += FPSTR(WC_HTTP_FORM_END);
+  page += FPSTR(WC_HTTP_END);
 
-  server->sendHeader("Content-Length", String(page.length()));
-  server->send(200, "text/html", page);
-
+  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", page);
+  response->addHeader("Content-Length", String(page.length()));
+  request->send(response);
 
   WC_DEBUG_PRINTLN("::Sent config page");
 }
 
 /** Handle the WLAN save form and redirect to WLAN config page again */
-void WIFIConfig::handleWifiSave() {
+void WIFIConfig::handleWifiSave(AsyncWebServerRequest * request) {
   WC_DEBUG_PRINTLN("::WiFi save");
 
   //SAVE/connect here
-  _ssid = server->arg("s").c_str();
-  _pass = server->arg("p").c_str();
+  _ssid = request->arg("s").c_str();
+  _pass = request->arg("p").c_str();
 
   //parameters
   for (int i = 0; i < _paramsCount; i++) {
@@ -280,25 +280,26 @@ void WIFIConfig::handleWifiSave() {
       break;
     }
     //read parameter
-    String value = server->arg(_params[i]->getID()).c_str();
+    String value = request->arg(_params[i]->getID()).c_str();
     //store it in array
-    value.toCharArray(_params[i]->_value, _params[i]->_length);
+    value.toCharArray(_params[i]->_value, _params[i]->_length + 1);
     WC_DEBUG_PRINT("::Parameter: ");
     WC_DEBUG_PRINT(_params[i]->getID()); WC_DEBUG_PRINT(": ");
     WC_DEBUG_PRINTLN(value);
   }
 
-  String page = FPSTR(HTTP_HEAD);
+  String page = FPSTR(WC_HTTP_HEAD);
   page.replace("{v}", "Credentials Saved");
-  page += FPSTR(HTTP_SCRIPT);
-  page += FPSTR(HTTP_STYLE);
+  page += FPSTR(WC_HTTP_SCRIPT);
+  page += FPSTR(WC_HTTP_STYLE);
   page += _customHeadElement;
-  page += FPSTR(HTTP_HEAD_END);
-  page += FPSTR(HTTP_SAVED);
-  page += FPSTR(HTTP_END);
+  page += FPSTR(WC_HTTP_HEAD_END);
+  page += FPSTR(WC_HTTP_SAVED);
+  page += FPSTR(WC_HTTP_END);
 
-  server->sendHeader("Content-Length", String(page.length()));
-  server->send(200, "text/html", page);
+  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", page);
+  response->addHeader("Content-Length", String(page.length()));
+  request->send(response);
 
   WC_DEBUG_PRINTLN("::Sent wifi save page");
 
@@ -306,15 +307,15 @@ void WIFIConfig::handleWifiSave() {
 }
 
 /** Handle the info page */
-void WIFIConfig::handleInfo() {
+void WIFIConfig::handleInfo(AsyncWebServerRequest * request) {
   WC_DEBUG_PRINTLN("::Info");
 
-  String page = FPSTR(HTTP_HEAD);
+  String page = FPSTR(WC_HTTP_HEAD);
   page.replace("{v}", "Info");
-  page += FPSTR(HTTP_SCRIPT);
-  page += FPSTR(HTTP_STYLE);
+  page += FPSTR(WC_HTTP_SCRIPT);
+  page += FPSTR(WC_HTTP_STYLE);
   page += _customHeadElement;
-  page += FPSTR(HTTP_HEAD_END);
+  page += FPSTR(WC_HTTP_HEAD_END);
   page += F("<dl>");
   page += F("<dt>Chip ID</dt><dd>");
   page += ESP.getChipId();
@@ -338,29 +339,31 @@ void WIFIConfig::handleInfo() {
   page += WiFi.macAddress();
   page += F("</dd>");
   page += F("</dl>");
-  page += FPSTR(HTTP_END);
+  page += FPSTR(WC_HTTP_END);
 
-  server->sendHeader("Content-Length", String(page.length()));
-  server->send(200, "text/html", page);
+  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", page);
+  response->addHeader("Content-Length", String(page.length()));
+  request->send(response);
 
   WC_DEBUG_PRINTLN("Sent info page");
 }
 
 /** Handle the reset page */
-void WIFIConfig::handleReset() {
+void WIFIConfig::handleReset(AsyncWebServerRequest * request) {
   WC_DEBUG_PRINTLN("::Reset");
   
-  String page = FPSTR(HTTP_HEAD);
+  String page = FPSTR(WC_HTTP_HEAD);
   page.replace("{v}", "Info");
-  page += FPSTR(HTTP_SCRIPT);
-  page += FPSTR(HTTP_STYLE);
+  page += FPSTR(WC_HTTP_SCRIPT);
+  page += FPSTR(WC_HTTP_STYLE);
   page += _customHeadElement;
-  page += FPSTR(HTTP_HEAD_END);
+  page += FPSTR(WC_HTTP_HEAD_END);
   page += F("Module will reset in a few seconds.");
-  page += FPSTR(HTTP_END);
+  page += FPSTR(WC_HTTP_END);
 
-  server->sendHeader("Content-Length", String(page.length()));
-  server->send(200, "text/html", page);
+  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", page);
+  response->addHeader("Content-Length", String(page.length()));
+  request->send(response);
 
   WC_DEBUG_PRINTLN("::Sent reset page");
   delay(5000);
@@ -368,47 +371,8 @@ void WIFIConfig::handleReset() {
   delay(2000);
 }
 
-void WIFIConfig::handleNotFound() {
-  if (captivePortal()) { // If captive portal redirect instead of displaying the error page.
-    return;
-  }
-  String message = "File Not Found\n\n";
-  message += "URI: ";
-  message += server->uri();
-  message += "\nMethod: ";
-  message += ( server->method() == HTTP_GET ) ? "GET" : "POST";
-  message += "\nArguments: ";
-  message += server->args();
-  message += "\n";
-
-  for ( uint8_t i = 0; i < server->args(); i++ ) {
-    message += " " + server->argName ( i ) + ": " + server->arg ( i ) + "\n";
-  }
-  server->sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server->sendHeader("Pragma", "no-cache");
-  server->sendHeader("Expires", "-1");
-  server->sendHeader("Content-Length", String(message.length()));
-  server->send ( 404, "text/plain", message );
-  delay(500);
-  server->client().flush();
-  server->client().stop(); // Stop is needed because we sent no content length
-}
-
-
-/** Redirect to captive portal if we got a request for another domain. Return true in that case so the page handler do not try to handle the request again. */
-boolean WIFIConfig::captivePortal() {
-  if (!isIp(server->hostHeader()) ) {
-    WC_DEBUG_PRINTLN("::Request redirected to captive portal");
-    String page = String("Go to ") + toStringIp(server->client().localIP());
-    server->sendHeader("Location", String("http://") + toStringIp(server->client().localIP()), true);
-    server->sendHeader("Content-Length", String(page.length()));
-    server->send ( 302, "text/plain", page); // Empty content inhibits Content-length header so we have to close the socket ourselves.
-    delay(500);
-    server->client().flush();
-    server->client().stop(); // Stop is needed because we sent no content length
-    return true;
-  }
-  return false;
+void WIFIConfig::handleNotFound(AsyncWebServerRequest * request) {
+  request->redirect("/");
 }
 
 //start up save config callback
@@ -421,23 +385,10 @@ void WIFIConfig::setCustomHeadElement(const char* element) {
   _customHeadElement = element;
 }
 
-/** Is this an IP? */
-boolean WIFIConfig::isIp(String str) {
-  for (int i = 0; i < str.length(); i++) {
-    int c = str.charAt(i);
-    if (c != '.' && (c < '0' || c > '9')) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/** IP to String? */
-String WIFIConfig::toStringIp(IPAddress ip) {
-  String res = "";
-  for (int i = 0; i < 3; i++) {
-    res += String((ip >> (8 * i)) & 0xFF) + ".";
-  }
-  res += String(((ip >> 8 * 3)) & 0xFF);
-  return res;
+void WIFIConfig::cleanup(void) {
+    server.reset();
+    dnsServer->stop();
+    dnsServer.reset();
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_STA);
 }
