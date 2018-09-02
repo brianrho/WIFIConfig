@@ -130,8 +130,8 @@ void WIFIConfig::setupConfigPortal() {
 
 }
 
-boolean WIFIConfig::configPortalHasTimeout(){
-    if(_configPortalTimeout == 0 || wifi_softap_get_station_num() > 0){
+boolean WIFIConfig::configPortalHasTimeout() {
+    if(_configPortalTimeout == 0 || WiFi.softAPgetStationNum() > 0) {
       _configPortalStart = millis(); // kludge, bump configportal start time to skew timeouts
       return false;
     }
@@ -139,7 +139,13 @@ boolean WIFIConfig::configPortalHasTimeout(){
 }
 
 boolean WIFIConfig::startConfigPortal() {
-  String ssid = "ESP" + String(ESP.getChipId());
+  #if defined(ARDUINO_ARCH_ESP8266)
+    String ssid = "ESP" + String(ESP.getChipId());
+  #elif defined(ARDUINO_ARCH_ESP32)
+    uint64_t chip_id = ESP.getEfuseMac();
+    String ssid = "ESP" + String((uint16_t)(chip_id >> 32));
+    ssid += String((uint32_t)chip_id);
+  #endif
   return startConfigPortal(ssid.c_str(), NULL);
 }
 
@@ -317,18 +323,6 @@ void WIFIConfig::handleInfo(AsyncWebServerRequest * request) {
   page += _customHeadElement;
   page += FPSTR(WC_HTTP_HEAD_END);
   page += F("<dl>");
-  page += F("<dt>Chip ID</dt><dd>");
-  page += ESP.getChipId();
-  page += F("</dd>");
-  page += F("<dt>Flash Chip ID</dt><dd>");
-  page += ESP.getFlashChipId();
-  page += F("</dd>");
-  page += F("<dt>IDE Flash Size</dt><dd>");
-  page += ESP.getFlashChipSize();
-  page += F(" bytes</dd>");
-  page += F("<dt>Real Flash Size</dt><dd>");
-  page += ESP.getFlashChipRealSize();
-  page += F(" bytes</dd>");
   page += F("<dt>Soft AP IP</dt><dd>");
   page += WiFi.softAPIP().toString();
   page += F("</dd>");

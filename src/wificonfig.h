@@ -13,8 +13,14 @@
 #ifndef WIFIConfig_h
 #define WIFIConfig_h
 
-#include <ESP8266WiFi.h>
-#include <ESPAsyncTCP.h>
+#if defined(ARDUINO_ARCH_ESP8266)
+    #include <ESP8266WiFi.h>
+    #include <ESPAsyncTCP.h>
+#elif defined(ARDUINO_ARCH_ESP32)
+    #include <WiFi.h>
+    #include <AsyncTCP.h>
+#endif
+
 #include <ESPAsyncWebServer.h>
 #include <DNSServer.h>
 #include <memory>
@@ -38,10 +44,6 @@
     #define WC_DEBUG_HEX(x)
     #define WC_DEBUG_HEXLN(x)
 #endif
-
-extern "C" {
-  #include "user_interface.h"
-}
 
 #define WIFICONFIG_MAX_PARAMS 10
 
@@ -122,9 +124,7 @@ class WIFIConfig
     int           _paramsCount            = 0;
 
     const char*   _customHeadElement      = "";
-
-    int           status = WL_IDLE_STATUS;
-
+    
     void          handleRoot(AsyncWebServerRequest * request);
     void          handleWifiSave(AsyncWebServerRequest * request);
     void          handleInfo(AsyncWebServerRequest * request);
