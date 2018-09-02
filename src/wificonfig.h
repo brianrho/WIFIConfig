@@ -110,7 +110,12 @@ class WIFIConfig
     uint8_t       config_loop(void);
   private:
     std::unique_ptr<DNSServer>        dnsServer;
-    std::unique_ptr<AsyncWebServer> server;
+    
+    /* AsyncWebServer destructor causes an exception when deleted,
+     * there's no stop() or close(), reset() frees everything but 
+     * there's no easy way to restart the server if it's needed short of creating a new instance, 
+     * so we'll just have to live with a member variable for now if we ever want to reuse the server */
+    AsyncWebServer server;
     
     void          setupConfigPortal();
 

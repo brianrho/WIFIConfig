@@ -68,7 +68,9 @@ const char* WIFIConfigParam::getCustomHTML() {
   return _customHTML;
 }
 
-WIFIConfig::WIFIConfig() {
+WIFIConfig::WIFIConfig() : server(80)
+{
+    
 }
 
 void WIFIConfig::addParameter(WIFIConfigParam *p, bool hasDefault) {
@@ -97,7 +99,6 @@ void WIFIConfig::resetParameterList(void) {
 
 void WIFIConfig::setupConfigPortal() {
   dnsServer.reset(new DNSServer());
-  server.reset(new AsyncWebServer(80));
 
   _configPortalStart = millis();
 
@@ -119,13 +120,13 @@ void WIFIConfig::setupConfigPortal() {
   dnsServer->start(DNS_PORT, "*", WiFi.softAPIP());
 
   /* Setup web pages: root, wifi config pages, SO captive portal detectors and not found. */
-  server->on("/", std::bind(&WIFIConfig::handleRoot, this, std::placeholders::_1));
-  server->on("/wifisave", std::bind(&WIFIConfig::handleWifiSave, this, std::placeholders::_1));
-  server->on("/i", std::bind(&WIFIConfig::handleInfo, this, std::placeholders::_1));
-  server->on("/r", std::bind(&WIFIConfig::handleReset, this, std::placeholders::_1));
-  server->on("/fwlink", std::bind(&WIFIConfig::handleRoot, this, std::placeholders::_1));  //Microsoft captive portal. Maybe not needed. Might be handled by notFound handler.
-  server->onNotFound (std::bind(&WIFIConfig::handleNotFound, this, std::placeholders::_1));
-  server->begin(); // Web server start
+  server.on("/", std::bind(&WIFIConfig::handleRoot, this, std::placeholders::_1));
+  server.on("/wifisave", std::bind(&WIFIConfig::handleWifiSave, this, std::placeholders::_1));
+  server.on("/i", std::bind(&WIFIConfig::handleInfo, this, std::placeholders::_1));
+  server.on("/r", std::bind(&WIFIConfig::handleReset, this, std::placeholders::_1));
+  server.on("/fwlink", std::bind(&WIFIConfig::handleRoot, this, std::placeholders::_1));  //Microsoft captive portal. Maybe not needed. Might be handled by notFound handler.
+  server.onNotFound (std::bind(&WIFIConfig::handleRoot, this, std::placeholders::_1));
+  server.begin(); // Web server start
   WC_DEBUG_PRINTLN("::HTTP server started");
 
 }
@@ -380,7 +381,6 @@ void WIFIConfig::setCustomHeadElement(const char* element) {
 }
 
 void WIFIConfig::cleanup(void) {
-    server.reset();
     dnsServer->stop();
     dnsServer.reset();
     WiFi.softAPdisconnect(true);
