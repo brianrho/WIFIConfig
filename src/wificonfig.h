@@ -111,9 +111,10 @@ class WIFIConfig
   private:
     std::unique_ptr<DNSServer>        dnsServer;
     
-    /* AsyncWebServer destructor causes an exception when deleted,
+    /* AsyncWebServer causes an exception when deleted,
      * there's no stop() or close(), reset() frees everything but 
-     * there's no easy way to restart the server if it's needed short of creating a new instance, 
+     * there's no easy way to restart the server if it's needed short of creating a new instance,
+     * and if you do that with startConfigPortal(), the old one's still hanging around, un-deletable and leaking memory,
      * so we'll just have to live with a member variable for now if we ever want to reuse the server */
     AsyncWebServer server;
     
