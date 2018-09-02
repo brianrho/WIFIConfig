@@ -57,8 +57,8 @@ enum {
 class WIFIConfigParam {
   public:
     WIFIConfigParam(const char *custom);
-    WIFIConfigParam(const char *id, const char *placeholder, char *buffer, int length);
-    WIFIConfigParam(const char *id, const char *placeholder, char *buffer, int length, const char *custom);
+    WIFIConfigParam(const char *id, const char *placeholder);
+    WIFIConfigParam(const char *id, const char *placeholder, const char *custom);
 
     const char *getID();
     const char *getValue();
@@ -72,7 +72,7 @@ class WIFIConfigParam {
     int         _length;
     const char *_customHTML;
 
-    void init(const char *id, const char *placeholder, char *buffer, int length, const char *custom);
+    void init(const char *id, const char *placeholder, const char *custom);
 
     friend class WIFIConfig;
 };
@@ -98,13 +98,17 @@ class WIFIConfig
     void          setConfigPortalTimeout(unsigned long seconds);
     //called when settings have been changed and connection was successful
     void          setSaveConfigCallback( void (*func)(void) );
-    //adds a custom parameter
-    void          addParameter(WIFIConfigParam *p, bool hasDefault = false);
+    //adds a custom parameter, additional parameters include a buffer for storing the parameter,
+    // its length and if there's a default value stored within the buffer
+    void          addParameter(WIFIConfigParam *p, char *buffer, int length, bool hasDefault = false);
+    /* this resets the parameter list to zero so you can re-add parameters */
     void          resetParameterList(void);
     //TODO
     //if this is set, customise style
     void          setCustomHeadElement(const char* element);
 
+    // get the WIFI ssid and key after configuration,
+    // pass in a buffer and the maximum number of characters to copy
     bool          get_wifi_ssid(char * ssidbuf, uint16_t len);
     bool          get_wifi_passkey(char * keybuf, uint16_t len);
     uint8_t       config_loop(void);

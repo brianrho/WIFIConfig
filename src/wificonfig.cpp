@@ -35,19 +35,17 @@ WIFIConfigParam::WIFIConfigParam(const char *custom) {
 }
 
 // Length parameter indicates max length of string to copy, excluding terminating nul
-WIFIConfigParam::WIFIConfigParam(const char *id, const char *placeholder, char *buffer, int length) {
-  init(id, placeholder, buffer, length, "");
+WIFIConfigParam::WIFIConfigParam(const char *id, const char *placeholder) {
+  init(id, placeholder, "");
 }
 
-WIFIConfigParam::WIFIConfigParam(const char *id, const char *placeholder, char *buffer, int length, const char *custom) {
-  init(id, placeholder, buffer, length, custom);
+WIFIConfigParam::WIFIConfigParam(const char *id, const char *placeholder, const char *custom) {
+  init(id, placeholder, custom);
 }
 
-void WIFIConfigParam::init(const char *id, const char *placeholder, char *buffer, int length, const char *custom) {
+void WIFIConfigParam::init(const char *id, const char *placeholder, const char *custom) {
   _id = id;
   _placeholder = placeholder;
-  _length = length;
-  _value = buffer;
 
   _customHTML = custom;
 }
@@ -73,7 +71,7 @@ WIFIConfig::WIFIConfig() : server(80)
     
 }
 
-void WIFIConfig::addParameter(WIFIConfigParam *p, bool hasDefault) {
+void WIFIConfig::addParameter(WIFIConfigParam *p, char *buffer, int length, bool hasDefault) {
   if(_paramsCount + 1 > WIFICONFIG_MAX_PARAMS)
   {
     //Max parameters exceeded!
@@ -83,8 +81,11 @@ void WIFIConfig::addParameter(WIFIConfigParam *p, bool hasDefault) {
 	return;
   }
   
+  p->_value = buffer;
+  p->_length = length;
+  
   // nul terminate the parameter buffer, if there's no default value
-  if (!hasDefault && p->getValue() != NULL && p->getValueLength() != 0)
+  if (!hasDefault && p->_value != NULL && p->_length != 0)
       p->_value[0] = 0;
   
   _params[_paramsCount] = p;
@@ -145,7 +146,7 @@ boolean WIFIConfig::startConfigPortal() {
   #elif defined(ARDUINO_ARCH_ESP32)
     uint64_t chip_id = ESP.getEfuseMac();
     String ssid = "ESP" + String((uint16_t)(chip_id >> 32));
-    ssid += String((uint32_t)chip_id);
+    ssid += String((uint32_t)(chip_id & 0x0000FFFFFFFF));
   #endif
   return startConfigPortal(ssid.c_str(), NULL);
 }
