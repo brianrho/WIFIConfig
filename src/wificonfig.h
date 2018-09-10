@@ -81,7 +81,7 @@ class WIFIConfigParam {
 class WIFIConfig
 {
   public:
-    WIFIConfig();
+    WIFIConfig(const char * page_title = NULL);
 
     //if you want to always start the config portal, without trying to connect first
     boolean       startConfigPortal();
@@ -134,6 +134,7 @@ class WIFIConfig
     int           _paramsCount            = 0;
 
     const char*   _customHeadElement      = "";
+    const char*   _page_title;
     
     void          handleRoot(AsyncWebServerRequest * request);
     void          handleWifiSave(AsyncWebServerRequest * request);

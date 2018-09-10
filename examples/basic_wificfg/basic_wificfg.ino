@@ -14,8 +14,8 @@ char uname[MAX_UNAME_LEN + 1];
 char pwd[MAX_PWD_LEN + 1];
 char server[MAX_SERVER_LEN + 1] = "defaultServer.com";
 
-/* create the WIFIConfig instance */
-WIFIConfig wcfg;
+/* create the WIFIConfig instance with the page title */
+WIFIConfig wcfg("The Portal");
 
 /* Create custom parameters for username, password and server.
  *  Parameters are: a unique ID string, and a placeholder to be used in the web form,
