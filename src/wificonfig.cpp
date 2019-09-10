@@ -208,8 +208,8 @@ bool WIFIConfig::get_wifi_ssid(char * ssidbuf, uint16_t len) {
 
 // 'len' stands for the max number of chars to copy excluding the nul byte 
 bool WIFIConfig::get_wifi_passkey(char * keybuf, uint16_t len) {
-    if (_pass == "" || _pass.length() > len)
-    return false;
+    if (_pass.length() > len)
+        return false;
     _pass.toCharArray(keybuf, len + 1);
     return true;
 }
